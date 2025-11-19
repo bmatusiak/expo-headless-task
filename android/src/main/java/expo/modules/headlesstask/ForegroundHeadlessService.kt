@@ -17,11 +17,24 @@ class ForegroundHeadlessService : HeadlessJsTaskService() {
   companion object {
     const val CHANNEL_ID_DEFAULT = "expo_headless_fg"
     const val NOTIFICATION_ID = 1001
+    const val ACTION_RENOTIFY = "expo_headless_fg_RENOTIFY"
     var isRunning: Boolean = false
     var listener: ((Boolean) -> Unit)? = null
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    // If we're here due to a re-notify request (user dismissed the notification),
+    // rebuild the notification without re-scheduling the JS task.
+    if (intent?.action == ACTION_RENOTIFY || intent?.getBooleanExtra("renotify", false) == true) {
+      isRunning = true
+      listener?.invoke(true)
+      createChannelIfNeeded(intent)
+      val notification = buildNotification(intent)
+      Log.d("ExpoHeadlessTask", "Re-notifying foreground with title=" + intent.getStringExtra("title"))
+      startForeground(NOTIFICATION_ID, notification)
+      return START_STICKY
+    }
+
     isRunning = true
     listener?.invoke(true)
     createChannelIfNeeded(intent)
@@ -107,6 +120,30 @@ class ForegroundHeadlessService : HeadlessJsTaskService() {
         val contentIntent = PendingIntent.getActivity(this, 0, launchIntent, piFlags)
         builder.setContentIntent(contentIntent)
       }
+    } catch (_: Exception) { }
+
+    // If the user dismisses the notification, immediately re-add it.
+    try {
+      val reNotifyIntent = Intent(this, ForegroundHeadlessService::class.java).apply {
+        action = ACTION_RENOTIFY
+        // Propagate essentials so the rebuilt notification has consistent content
+        putExtra("channelId", channelId)
+        putExtra("channelName", intent?.getStringExtra("channelName"))
+        val importanceRaw = intent?.getIntExtra("importance", NotificationManager.IMPORTANCE_LOW)
+          ?: NotificationManager.IMPORTANCE_LOW
+        putExtra("importance", importanceRaw)
+        putExtra("title", title)
+        putExtra("text", text)
+        // Marker for older callers that might not set action
+        putExtra("renotify", true)
+      }
+      val piFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+      } else {
+        PendingIntent.FLAG_UPDATE_CURRENT
+      }
+      val deletePI = PendingIntent.getService(this, 1, reNotifyIntent, piFlags)
+      builder.setDeleteIntent(deletePI)
     } catch (_: Exception) { }
 
     val notification = builder.build()
