@@ -4,8 +4,7 @@ import {
   Platform,
   StyleSheet,
   Text,
-  View,
-  ScrollView,
+  View
 } from 'react-native';
 
 // Import the Expo ported module
@@ -20,7 +19,7 @@ const isAndroid = Platform.OS === 'android';
 if (isAndroid && !global.__demoHeadlessTaskRegistered) {
   AppRegistry.registerHeadlessTask('DemoForegroundTask', () => async (data) => {
     console.log('[HeadlessTask] started with data', data);
-    let i = 0; 
+    let i = 0;
     while (i < 60) {
       await new Promise(r => setTimeout(r, 1000));
       console.log('[HeadlessTask] tick', i);
@@ -62,7 +61,7 @@ export function Demo() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.controls} keyboardShouldPersistTaps="handled">
+    <View style={styles.controls}>
       <Text style={styles.controlsTitle}>Expo Headless Task</Text>
       <View style={styles.seperator} />
       <Text style={styles.sectionLabel}>Foreground Service + Headless JS</Text>
@@ -73,7 +72,7 @@ export function Demo() {
       <View style={styles.button}>
         <Button title="Stop Task" onPress={stop} />
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
