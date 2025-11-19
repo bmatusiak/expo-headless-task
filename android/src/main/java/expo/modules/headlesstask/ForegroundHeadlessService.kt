@@ -3,6 +3,7 @@ package expo.modules.headlesstask
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.util.Log
 import android.os.Build
 import android.os.Bundle
@@ -90,6 +91,23 @@ class ForegroundHeadlessService : HeadlessJsTaskService() {
       .setCategory(NotificationCompat.CATEGORY_SERVICE)
       .setAutoCancel(false)
       .setOngoing(true)
+
+    // When the notification is tapped, bring the app to the foreground
+    try {
+      val pm = applicationContext.packageManager
+      val launchIntent = pm.getLaunchIntentForPackage(applicationContext.packageName)?.apply {
+        addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+      if (launchIntent != null) {
+        val piFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+          PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+          PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val contentIntent = PendingIntent.getActivity(this, 0, launchIntent, piFlags)
+        builder.setContentIntent(contentIntent)
+      }
+    } catch (_: Exception) { }
 
     val notification = builder.build()
     // Ensure notification cannot be dismissed while service runs

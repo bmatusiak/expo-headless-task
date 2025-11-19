@@ -21,7 +21,7 @@ if (isAndroid && !global.__demoHeadlessTaskRegistered) {
   AppRegistry.registerHeadlessTask('DemoForegroundTask', () => async (data) => {
     console.log('[HeadlessTask] started with data', data);
     let i = 0; 
-    while (i < 5) {
+    while (i < 60) {
       await new Promise(r => setTimeout(r, 1000));
       console.log('[HeadlessTask] tick', i);
       i++;

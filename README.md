@@ -1,6 +1,6 @@
 # Expo Headless Task Module
 
-Android-only Expo module providing a simple bridge for starting/stopping a foreground Service that runs a React Native Headless JS task. Useful for lightweight periodic work, short background loops, or continuing processing when the UI is minimized.
+Android-only Expo module providing a simple bridge for starting/stopping a foreground Service that runs a React Native Headless JS task. Useful for lightweight periodic work, short background loops, or continuing processing when the UI is minimized. The foreground notification is clickable and will bring your app to the foreground.
 
 ## Features
 - Start a foreground service tied to a registered Headless JS task.
@@ -102,7 +102,7 @@ Utility that checks/requests Android 13+ notification permission. Called interna
 Underlying native module reference (internal; avoid direct usage unless extending functionality).
 
 ## Notification Object Schema
-Foreground service requires a visible notification (Android policy). Keys:
+Foreground service requires a visible notification (Android policy). Tapping the notification brings your app to the foreground. Keys:
 - `channelId` (string): Notification channel ID (created if missing).
 - `channelName` (string): Human-readable channel name.
 - `title` (string): Notification title.
