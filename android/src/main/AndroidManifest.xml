@@ -1,0 +1,15 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+	<!-- Required for any foreground service -->
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+	<!-- Needed because service declares android:foregroundServiceType="dataSync" (Android 14+) -->
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+	<!-- Android 13+ notification runtime permission so foreground notification can appear -->
+	<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+	<application>
+		<service
+			android:name="expo.modules.headlesstask.ForegroundHeadlessService"
+			android:exported="false"
+			android:foregroundServiceType="dataSync" />
+	</application>
+</manifest>

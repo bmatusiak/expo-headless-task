@@ -1,0 +1,13 @@
+{
+  "name": "expo-headless-task",
+  "version": "0.1.0",
+  "description": "Create a headless task foreground service with notification for persistance",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "clean": "rm -rf android/build"
+  }
+}
