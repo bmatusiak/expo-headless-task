@@ -7,6 +7,90 @@ if (NativeExpoHeadlessTaskModule) {
 	emitter = new EventEmitter(NativeExpoHeadlessTaskModule);
 }
 
+// Cross-runtime event bridge
+const BRIDGE_EVENT_TYPE = 'expo-headless-bridge-event';
+
+function createListenerMap() {
+	const map = new Map();
+	return {
+		add(event, fn) {
+			let set = map.get(event);
+			if (!set) { set = new Set(); map.set(event, set); }
+			set.add(fn);
+			return () => { set.delete(fn); if (set.size === 0) map.delete(event); };
+		},
+		get(event) { return map.get(event) || new Set(); },
+		clear() { map.clear(); },
+	};
+}
+
+function createMainBridgeEmitter({ channel = 'default' } = {}) {
+	const listeners = createListenerMap();
+	const inbound = onMessageFromTask((data) => {
+		try {
+			if (!data || data.type !== BRIDGE_EVENT_TYPE) return;
+			if (data.channel !== channel) return;
+			for (const fn of listeners.get(data.event)) {
+				try { fn(...(Array.isArray(data.args) ? data.args : [data.args])); } catch (_) {}
+			}
+		} catch (_) {}
+	});
+
+	return {
+		emit(event, ...args) {
+			// Send to headless task
+			return sendToTask({ type: BRIDGE_EVENT_TYPE, channel, event, args });
+		},
+		on(event, handler) {
+			return { remove: listeners.add(event, handler) };
+		},
+		off(event, handler) {
+			// Best-effort: re-add and immediately remove specific handler
+			const remove = listeners.add(event, handler);
+			remove();
+		},
+		removeAllListeners() { listeners.clear(); },
+		dispose() { inbound.remove?.(); listeners.clear(); },
+	};
+}
+
+function createHeadlessBridgeEmitter({ channel = 'default' } = {}) {
+	const listeners = createListenerMap();
+	const inbound = onMessageToTask((data) => {
+		try {
+			if (!data || data.type !== BRIDGE_EVENT_TYPE) return;
+			if (data.channel !== channel) return;
+			for (const fn of listeners.get(data.event)) {
+				try { fn(...(Array.isArray(data.args) ? data.args : [data.args])); } catch (_) {}
+			}
+		} catch (_) {}
+	});
+
+	return {
+		emit(event, ...args) {
+			// Send to main runtime
+			return sendFromTask({ type: BRIDGE_EVENT_TYPE, channel, event, args });
+		},
+		on(event, handler) {
+			return { remove: listeners.add(event, handler) };
+		},
+		off(event, handler) {
+			const remove = listeners.add(event, handler);
+			remove();
+		},
+		removeAllListeners() { listeners.clear(); },
+		dispose() { inbound.remove?.(); listeners.clear(); },
+	};
+}
+
+function createBridgeEmitter(options = {}) {
+	const side = options?.side || 'main'; // 'main' | 'headless'
+	const channel = options?.channel || 'default';
+	return side === 'headless'
+		? createHeadlessBridgeEmitter({ channel })
+		: createMainBridgeEmitter({ channel });
+}
+
 async function ensureNotificationPermission() {
 	if (!isAndroid) return true;
 	if (Platform.Version < 33) return true; // POST_NOTIFICATIONS starts API 33
@@ -74,9 +158,8 @@ export default {
 	isTaskRunning,
 	onTaskRunningChanged,
 	ensureNotificationPermission,
-	sendToTask,
-	sendFromTask,
-	onMessageToTask,
-	onMessageFromTask,
+	createMainBridgeEmitter,
+	createHeadlessBridgeEmitter,
+	createBridgeEmitter,
 	NativeExpoHeadlessTaskModule,
 };

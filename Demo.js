@@ -19,15 +19,11 @@ const isAndroid = Platform.OS === 'android';
 if (isAndroid && !global.__demoHeadlessTaskRegistered) {
   AppRegistry.registerHeadlessTask('DemoForegroundTask', () => async (data) => {
     console.log('[HeadlessTask] started with data', data);
-    // Subscribe to messages sent from the app runtime
-    const toTaskSub = ExpoHeadlessTask.onMessageToTask((msg) => {
-      console.log('[HeadlessTask] received messageToTask', msg);
-      // Echo back with acknowledgement
-      try {
-        ExpoHeadlessTask.sendFromTask({ ack: true, received: msg, at: Date.now() });
-      } catch (e) {
-        console.warn('[HeadlessTask] sendFromTask failed', e);
-      }
+    // Bridge-based messaging between headless and main
+    const bridge = ExpoHeadlessTask.createBridgeEmitter({ side: 'headless', channel: 'demo' });
+    const toTaskSub = bridge.on('ping', (msg) => {
+      console.log('[HeadlessTask] received ping', msg);
+      try { bridge.emit('pong', { ack: true, received: msg, at: Date.now() }); } catch (e) { console.warn('[HeadlessTask] emit pong failed', e); }
     });
     let i = 0;
     while (i < 60) {
@@ -37,6 +33,7 @@ if (isAndroid && !global.__demoHeadlessTaskRegistered) {
     }
     console.log('[HeadlessTask] finished');
     try { toTaskSub.remove(); } catch (_e) {}
+    try { bridge.dispose(); } catch (_e) {}
     try { ExpoHeadlessTask.stopForegroundTask(); } catch (e) { console.warn('Stop foreground task failed', e); }
   });
   global.__demoHeadlessTaskRegistered = true;
@@ -50,12 +47,14 @@ export function Demo() {
   useEffect(() => {
     if (!isAndroid) return;
     const runningSub = ExpoHeadlessTask.onTaskRunningChanged(({ running }) => setRunning(running));
-    const fromTaskSub = ExpoHeadlessTask.onMessageFromTask((data) => {
+    const bridge = ExpoHeadlessTask.createBridgeEmitter({ side: 'main', channel: 'demo' });
+    const fromTaskSub = bridge.on('pong', (data) => {
       setMessagesFromTask(prev => [...prev, data]);
     });
     return () => {
       runningSub.remove();
       fromTaskSub.remove();
+      bridge.dispose();
     };
   }, []);
 
@@ -82,7 +81,14 @@ export function Demo() {
   const sendPing = () => {
     const payload = { type: 'ping', ts: Date.now(), seq: (lastSent?.seq || 0) + 1 };
     setLastSent(payload);
-    ExpoHeadlessTask.sendToTask(payload);
+    try {
+      const bridge = ExpoHeadlessTask.createBridgeEmitter({ side: 'main', channel: 'demo' });
+      // Fire-and-forget emit; we create a transient emitter for this send
+      bridge.emit('ping', payload);
+      bridge.dispose();
+    } catch (e) {
+      console.warn('Bridge emit failed', e);
+    }
   };
 
   return (
