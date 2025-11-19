@@ -5,7 +5,9 @@ Android-only Expo module providing a simple bridge for starting/stopping a foreg
 ## Features
 - Start a foreground service tied to a registered Headless JS task.
 - Automatic Android 13+ (API 33) notification permission request.
-- Observable running state via event listener (`onTaskRunningChanged`).
+- Observable running state (`taskRunningChanged` event).
+- Node.js-style EventEmitter facade (`on`, `off`, `emit`, `addListener`, etc.).
+- Bi-directional messaging between app runtime and headless task (`messageToTask`, `messageFromTask`).
 - Simple API surface (start, stop, query running state).
 - No-op on non-Android platforms (safe cross‑platform imports).
 
@@ -74,6 +76,7 @@ function stopTask() {
 ```
 
 ## API Reference
+You can use either dedicated methods or the EventEmitter-like interface.
 ### `startForegroundTask({ taskName, data?, notification? })`
 Starts the foreground service and invokes the registered headless task by name.
 - `taskName` (string): Must match `AppRegistry.registerHeadlessTask` name.
@@ -110,8 +113,39 @@ Foreground service requires a visible notification (Android policy). Tapping the
 - `importance` (number): Android importance level (e.g., 2 = `IMPORTANCE_DEFAULT`).
 Additional keys may be supported natively in future—keep schema minimal for now.
 
+### Messaging
+Two helper methods to send structured data between runtimes:
+```js
+ExpoHeadlessTask.sendToTask({ type: 'ping', ts: Date.now() }); // App -> Headless task
+ExpoHeadlessTask.sendFromTask({ ack: true }); // Headless task -> App (usually called inside task)
+```
+The headless task can subscribe using `ExpoHeadlessTask.onMessageToTask(fn)` and app runtime can subscribe using `ExpoHeadlessTask.onMessageFromTask(fn)`.
+
+### EventEmitter Facade
+Supported events you can subscribe to via `on(event, listener)` / `addListener(event, listener)`:
+- `taskRunningChanged` (payload: `{ running: boolean }`)
+- `messageToTask` (payload: arbitrary message object delivered to headless task)
+- `messageFromTask` (payload: arbitrary message object delivered from headless task)
+
+Example:
+```js
+const sub = ExpoHeadlessTask.on('messageFromTask', (msg) => {
+  console.log('Received from task', msg);
+});
+ExpoHeadlessTask.emit('messageToTask', { type: 'ping' }); // internally calls sendToTask
+// Later
+sub.remove();
+```
+
+Notes:
+- `emit('messageToTask', data)` is a convenience for `sendToTask(data)`.
+- `emit('messageFromTask', data)` maps to `sendFromTask(data)` (rarely needed from app side, but available for symmetry/testing).
+- Emitting `taskRunningChanged` is ignored (managed natively).
+
 ## Events
 - `taskRunningChanged`: Emitted when running state changes; payload `{ running: boolean }`.
+- `messageToTask`: Dispatched in headless task when app calls `sendToTask` / `emit('messageToTask')`; payload is the data object.
+- `messageFromTask`: Dispatched in app runtime when headless task calls `sendFromTask`.
 
 ## Permissions
 - Android 13+ (API 33): `POST_NOTIFICATIONS` runtime permission. Automatically requested by `startForegroundTask()` via `ensureNotificationPermission()`.
@@ -127,7 +161,11 @@ Additional keys may be supported natively in future—keep schema minimal for no
 3. If build cache issues: run module clean script if provided, then rebuild.
 
 ## Demo
-See `Demo.js` in this module for a working integration, including task registration and simple loop logging.
+See `Demo.js` for an integration including:
+- Task registration
+- Foreground service start/stop controls
+- Ping button using `emit('messageToTask', ...)`
+- Echo listener inside headless task replying with `sendFromTask`
 
 ## Best Practices
 - Always stop the foreground task when work completes to avoid a lingering notification.

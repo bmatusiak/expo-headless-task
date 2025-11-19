@@ -41,11 +41,42 @@ function onTaskRunningChanged(listener) {
 	return { remove: () => subscription.remove() };
 }
 
+// Cross-runtime messaging helpers
+function sendToTask(data = {}) {
+	if (!isAndroid) return;
+	try { return NativeExpoHeadlessTaskModule.sendToTask(data); } catch (e) { console.warn('[ExpoHeadlessTask] sendToTask failed', e); }
+}
+
+function sendFromTask(data = {}) {
+	if (!isAndroid) return;
+	try { return NativeExpoHeadlessTaskModule.sendFromTask(data); } catch (e) { console.warn('[ExpoHeadlessTask] sendFromTask failed', e); }
+}
+
+function onMessageToTask(listener) {
+	if (!emitter) return { remove: () => {} };
+	const sub = emitter.addListener('messageToTask', (event) => {
+		try { listener(event?.data); } catch (_) {}
+	});
+	return { remove: () => sub.remove() };
+}
+
+function onMessageFromTask(listener) {
+	if (!emitter) return { remove: () => {} };
+	const sub = emitter.addListener('messageFromTask', (event) => {
+		try { listener(event?.data); } catch (_) {}
+	});
+	return { remove: () => sub.remove() };
+}
+
 export default {
 	startForegroundTask,
 	stopForegroundTask,
 	isTaskRunning,
 	onTaskRunningChanged,
 	ensureNotificationPermission,
+	sendToTask,
+	sendFromTask,
+	onMessageToTask,
+	onMessageFromTask,
 	NativeExpoHeadlessTaskModule,
 };

@@ -19,6 +19,16 @@ const isAndroid = Platform.OS === 'android';
 if (isAndroid && !global.__demoHeadlessTaskRegistered) {
   AppRegistry.registerHeadlessTask('DemoForegroundTask', () => async (data) => {
     console.log('[HeadlessTask] started with data', data);
+    // Subscribe to messages sent from the app runtime
+    const toTaskSub = ExpoHeadlessTask.onMessageToTask((msg) => {
+      console.log('[HeadlessTask] received messageToTask', msg);
+      // Echo back with acknowledgement
+      try {
+        ExpoHeadlessTask.sendFromTask({ ack: true, received: msg, at: Date.now() });
+      } catch (e) {
+        console.warn('[HeadlessTask] sendFromTask failed', e);
+      }
+    });
     let i = 0;
     while (i < 60) {
       await new Promise(r => setTimeout(r, 1000));
@@ -26,6 +36,7 @@ if (isAndroid && !global.__demoHeadlessTaskRegistered) {
       i++;
     }
     console.log('[HeadlessTask] finished');
+    try { toTaskSub.remove(); } catch (_e) {}
     try { ExpoHeadlessTask.stopForegroundTask(); } catch (e) { console.warn('Stop foreground task failed', e); }
   });
   global.__demoHeadlessTaskRegistered = true;
@@ -33,11 +44,19 @@ if (isAndroid && !global.__demoHeadlessTaskRegistered) {
 
 export function Demo() {
   const [running, setRunning] = useState(false);
+  const [messagesFromTask, setMessagesFromTask] = useState([]);
+  const [lastSent, setLastSent] = useState(null);
 
   useEffect(() => {
     if (!isAndroid) return;
-    const sub = ExpoHeadlessTask.onTaskRunningChanged(({ running }) => setRunning(running));
-    return () => sub.remove();
+    const runningSub = ExpoHeadlessTask.onTaskRunningChanged(({ running }) => setRunning(running));
+    const fromTaskSub = ExpoHeadlessTask.onMessageFromTask((data) => {
+      setMessagesFromTask(prev => [...prev, data]);
+    });
+    return () => {
+      runningSub.remove();
+      fromTaskSub.remove();
+    };
   }, []);
 
   if (!isAndroid) return null;
@@ -60,6 +79,12 @@ export function Demo() {
     ExpoHeadlessTask.stopForegroundTask();
   };
 
+  const sendPing = () => {
+    const payload = { type: 'ping', ts: Date.now(), seq: (lastSent?.seq || 0) + 1 };
+    setLastSent(payload);
+    ExpoHeadlessTask.sendToTask(payload);
+  };
+
   return (
     <View style={styles.controls}>
       <Text style={styles.controlsTitle}>Expo Headless Task</Text>
@@ -72,6 +97,15 @@ export function Demo() {
       <View style={styles.button}>
         <Button title="Stop Task" onPress={stop} />
       </View>
+      <View style={styles.button}>
+        <Button title="Send Ping" onPress={sendPing} disabled={!running} />
+      </View>
+      <Text style={styles.sectionLabel}>Messaging</Text>
+      <Text style={styles.text}>Last Sent: {lastSent ? JSON.stringify(lastSent) : 'None'}</Text>
+      <Text style={styles.text}>Received ({messagesFromTask.length}):</Text>
+      {messagesFromTask.slice(-5).map((m, idx) => (
+        <Text key={idx} style={styles.text}>• {JSON.stringify(m)}</Text>
+      ))}
     </View>
   );
 }
@@ -99,7 +133,7 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 12,
-    color: '#666',
+    color: '#444',
   },
   seperator: {
     height: 1,

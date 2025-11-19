@@ -15,7 +15,7 @@ class ExpoHeadlessTaskModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("ExpoHeadlessTask")
 
-    Events("taskRunningChanged")
+    Events("taskRunningChanged", "messageToTask", "messageFromTask")
 
     OnStartObserving {
       ForegroundHeadlessService.listener = { running ->
@@ -70,6 +70,17 @@ class ExpoHeadlessTaskModule : Module() {
 
     Function("isTaskRunning") {
       ForegroundHeadlessService.isRunning
+    }
+
+    // App JS -> Headless Task JS message
+    AsyncFunction("sendToTask") { data: Map<String, Any>? ->
+      // Emit to any listeners (both runtimes if active)
+      try { sendEvent("messageToTask", mapOf("data" to data)) } catch (_: Exception) {}
+    }
+
+    // Headless Task JS -> App JS message
+    AsyncFunction("sendFromTask") { data: Map<String, Any>? ->
+      try { sendEvent("messageFromTask", mapOf("data" to data)) } catch (_: Exception) {}
     }
   }
 }
