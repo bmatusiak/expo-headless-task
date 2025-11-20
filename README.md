@@ -1,12 +1,11 @@
 # expo-headless-task
 
-Android-only Expo module to start/stop a foreground Service that runs a React Native Headless JS task, with a tiny cross-runtime event bridge between the main JS runtime and the headless task. Ideal for short background work that should continue when the UI is minimized.
+Android-only Expo module to start/stop a foreground Service that runs a React Native Headless JS task. Ideal for short background work that should continue when the UI is minimized.
 
 ## Features
 - Start a foreground service tied to a registered Headless JS task
 - Auto-requests Android 13+ (API 33) notification permission
 - Observe running state via `onTaskRunningChanged`
-- Simple bridge emitter for bi-directional messaging (main ↔ headless)
 - Safe no-ops on non-Android platforms
 
 ## Installation
@@ -69,50 +68,6 @@ function stopTask() {
 }
 ```
 
-## Bridge Messaging (main ↔ headless)
-Use a channelled bridge emitter to send events between the main runtime and the headless task.
-
-Notes:
-- `channel` namespaces messages (default `'default'`).
-- Payloads must be JSON-serializable.
-- Android-only; no-ops elsewhere.
-
-Main runtime:
-```js
-import ExpoHeadlessTask from 'expo-headless-task';
-
-const bridge = ExpoHeadlessTask.createBridgeEmitter({ side: 'main', channel: 'demo' });
-
-// Listen to replies from headless
-const sub = bridge.on('pong', (payload) => {
-  console.log('From task:', payload);
-});
-
-// Send a message to headless
-bridge.emit('ping', { ts: Date.now() });
-
-// Cleanup
-sub.remove();
-bridge.dispose();
-```
-
-Headless task:
-```js
-import ExpoHeadlessTask from 'expo-headless-task';
-
-export default async function taskMain() {
-  const bridge = ExpoHeadlessTask.createBridgeEmitter({ side: 'headless', channel: 'demo' });
-
-  const sub = bridge.on('ping', (payload) => {
-    console.log('From main:', payload);
-    bridge.emit('pong', { ack: true, at: Date.now(), received: payload });
-  });
-
-  // …perform work, then cleanup
-  sub.remove();
-  bridge.dispose();
-}
-```
 
 ## API Reference
 
@@ -135,16 +90,6 @@ Subscribe to `{ running: boolean }` changes. Returns `{ remove() }`.
 ### `ensureNotificationPermission()`
 Check/request Android 13+ notification permission. Usually not needed; called by `startForegroundTask`.
 
-### `createBridgeEmitter({ side, channel? })`
-Create an event bridge for cross-runtime messaging.
-- `side`: `'main' | 'headless'`.
-- `channel`: optional string namespace (default `'default'`).
-Returns an object with:
-- `emit(event: string, ...args: any[])`
-- `on(event: string, handler: (...args) => void): { remove(): void }`
-- `off(event, handler)` (best-effort)
-- `removeAllListeners()`
-- `dispose()`
 
 ## Notification Schema
 Foreground services require a visible notification:
@@ -175,6 +120,9 @@ See `Demo.js` for a complete example: task registration, start/stop controls, an
 ## Limitations
 - Designed for short tasks; long-running background work may be restricted by Android policies.
 - Requires a foreground notification; cannot run silently in background.
+
+## Process Isolation
+The foreground service may run in its own process (see manifest). This isolates the headless JS runtime. If you prefer a single process, remove any custom `android:process` attribute from the service declaration.
 
 ## License
 MIT (or your chosen license).

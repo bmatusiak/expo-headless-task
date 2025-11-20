@@ -1,5 +1,6 @@
 package expo.modules.headlesstask
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -12,10 +13,12 @@ class ExpoHeadlessTaskModule : Module() {
     get() = appContext.reactContext ?: appContext.currentActivity
     ?: throw IllegalStateException("Android context is not available yet")
 
+  @SuppressLint("UnspecifiedRegisterReceiverFlag")
   override fun definition() = ModuleDefinition {
     Name("ExpoHeadlessTask")
 
-    Events("taskRunningChanged", "messageToTask", "messageFromTask")
+    // Only expose taskRunningChanged now; messaging removed.
+    Events("taskRunningChanged")
 
     OnStartObserving {
       ForegroundHeadlessService.listener = { running ->
@@ -72,15 +75,5 @@ class ExpoHeadlessTaskModule : Module() {
       ForegroundHeadlessService.isRunning
     }
 
-    // App JS -> Headless Task JS message
-    AsyncFunction("sendToTask") { data: Map<String, Any>? ->
-      // Emit to any listeners (both runtimes if active)
-      try { sendEvent("messageToTask", mapOf("data" to data)) } catch (_: Exception) {}
-    }
-
-    // Headless Task JS -> App JS message
-    AsyncFunction("sendFromTask") { data: Map<String, Any>? ->
-      try { sendEvent("messageFromTask", mapOf("data" to data)) } catch (_: Exception) {}
-    }
   }
 }

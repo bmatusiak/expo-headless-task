@@ -3,12 +3,11 @@ import { Platform, PermissionsAndroid } from 'react-native';
 const isAndroid = Platform.OS === 'android';
 const NativeExpoHeadlessTaskModule = isAndroid ? requireNativeModule('ExpoHeadlessTask') : null;
 let emitter = null;
-if (NativeExpoHeadlessTaskModule) {
+if (NativeExpoHeadlessTaskModule) { 
 	emitter = new ExpoEventEmitter(NativeExpoHeadlessTaskModule);
 }
 import { AppRegistry } from 'react-native';
-import { EventEmitter as NodeEventEmitter } from 'events';
-console.log("Loaded ExpoHeadlessTaskModule");
+console.log('[ExpoHeadlessTask] JS module loaded');
 async function ensureNotificationPermission() {
 	if (!isAndroid) return true;
 	if (Platform.Version < 33) return true; // POST_NOTIFICATIONS starts API 33
@@ -43,49 +42,15 @@ function onTaskRunningChanged(listener) {
 	return { remove: () => subscription.remove() };
 }
 
-// Cross-runtime messaging helpers
-function sendToTask(data = {}) {
-	if (!isAndroid) return;
-	try { return NativeExpoHeadlessTaskModule.sendToTask(data); } catch (e) { console.warn('[ExpoHeadlessTask] sendToTask failed', e); }
-}
-
-function sendFromTask(data = {}) {
-	if (!isAndroid) return;
-	try { return NativeExpoHeadlessTaskModule.sendFromTask(data); } catch (e) { console.warn('[ExpoHeadlessTask] sendFromTask failed', e); }
-}
-
-function onMessageToTask(listener) {
-	if (!emitter) return { remove: () => { } };
-	const sub = emitter.addListener('messageToTask', (event) => {
-		try { listener(event?.data); } catch (_) { }
-	});
-	return { remove: () => sub.remove() };
-}
-
-function onMessageFromTask(listener) {
-	if (!emitter) return { remove: () => { } };
-	const sub = emitter.addListener('messageFromTask', (event) => {
-		try { listener(event?.data); } catch (_) { }
-	});
-	return { remove: () => sub.remove() };
-}
-
 const loadedTasks = [];
-var __HEADLESSTASKCONTEXT = false;
-var taskEventEmitter = new NodeEventEmitter();
+var __HEADLESSTASKCONTEXT = false; // retained for potential future diagnostic use
 
-// Register headless task once at module load to avoid duplicate warnings under StrictMode/fast refresh
+// Register headless task once at module load to avoid duplicate registrations under fast refresh/StrictMode
 if (isAndroid && !globalThis.__HeadlessTaskRegistered) {
 	AppRegistry.registerHeadlessTask('HEADLESS_TASK', () => async (data) => {
-		console.log("WTF", globalThis.WYTF);
 		__HEADLESSTASKCONTEXT = true;
 
 		// Subscribe to messages sent from the app runtime
-		const toTaskSub = onMessageToTask((data) => {
-			if (!__HEADLESSTASKCONTEXT) return;
-			taskEventEmitter.emit(data.name, ...data.args);
-		});
-		//short wait before starting tasks
 		await new Promise(r => setTimeout(r, 100));
 
 		// Execute any loaded tasks in parallel
@@ -98,7 +63,6 @@ if (isAndroid && !globalThis.__HeadlessTaskRegistered) {
 			})();
 		}));
 
-		try { toTaskSub.remove(); } catch (_e) { }
 		try { stopForegroundTask(); } catch (e) { console.warn('Stop foreground task failed', e); }
 	});
 	globalThis.__HeadlessTaskRegistered = true;
@@ -107,13 +71,7 @@ if (isAndroid && !globalThis.__HeadlessTaskRegistered) {
 var taskStarted = false;
 async function startTask(data, notification) {
 	if (!isAndroid || taskStarted) return;
-	const fromTaskSub = onMessageFromTask((data) => {
-		if (__HEADLESSTASKCONTEXT) return;
-		console.log('Message from task received', data);
-		taskEventEmitter.emit(data.name, ...data.args);
-	});
-	globalThis.WYTF = true;
-	const task = await startForegroundTask({
+	await startForegroundTask({
 		taskName: 'HEADLESS_TASK',
 		data: data,
 		notification: {
@@ -126,31 +84,12 @@ async function startTask(data, notification) {
 		},
 	});
 	taskStarted = true;
-	return () => {
-		try { fromTaskSub.remove(); } catch (_e) { }
-		try { task.remove(); } catch (_e) { }
-		taskStarted = false;
-	};
 }
 function loadTask(taskFunc) {
 	if (!isAndroid) return;
 	loadedTasks.push(taskFunc);
 }
 
-function onMessage(name, listener) {
-	taskEventEmitter.on(name, listener);
-	return () => {
-		taskEventEmitter.off(name, listener);
-	}
-}
-function emitMessage(name, ...args) {
-	if (!isAndroid) return;
-	// if (__HEADLESSTASKCONTEXT)
-		sendToTask({ name, args });
-	// else
-	// 	sendFromTask({ name, args });
-	// // else
-}
 
 function stopTask() {
 	if (!isAndroid) return;
@@ -159,8 +98,6 @@ function stopTask() {
 }
 
 export default {
-	// startForegroundTask,
-	// stopForegroundTask,
 	get __HEADLESSTASKCONTEXT() { return __HEADLESSTASKCONTEXT; },
 	startTask,
 	stopTask,
@@ -168,11 +105,5 @@ export default {
 	isTaskRunning,
 	onTaskRunningChanged,
 	ensureNotificationPermission,
-	on: onMessage,
-	emit: emitMessage,
-	// sendToTask,
-	// sendFromTask,
-	// onMessageToTask,
-	// onMessageFromTask,
 	NativeExpoHeadlessTaskModule,
 };

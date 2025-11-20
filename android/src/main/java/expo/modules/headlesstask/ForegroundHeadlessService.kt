@@ -8,10 +8,13 @@ import android.util.Log
 import android.os.Build
 import android.os.Bundle
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import androidx.core.app.NotificationCompat
 import com.facebook.react.HeadlessJsTaskService
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.jstasks.HeadlessJsTaskConfig
+import com.facebook.react.ReactApplication
 
 class ForegroundHeadlessService : HeadlessJsTaskService() {
   companion object {
@@ -21,6 +24,8 @@ class ForegroundHeadlessService : HeadlessJsTaskService() {
     var isRunning: Boolean = false
     var listener: ((Boolean) -> Unit)? = null
   }
+
+  // Broadcast receiver logic migrated to ExpoHeadlessTaskModule. Keep no local receiver.
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     // If we're here due to a re-notify request (user dismissed the notification),
@@ -41,6 +46,7 @@ class ForegroundHeadlessService : HeadlessJsTaskService() {
     val notification = buildNotification(intent)
     Log.d("ExpoHeadlessTask", "Starting foreground with notification title=" + intent?.getStringExtra("title"))
     startForeground(NOTIFICATION_ID, notification)
+    // Receiver moved to ExpoHeadlessTaskModule; no local registration needed.
     // IMPORTANT: Call super so HeadlessJsTaskService schedules the JS task.
     // Returning its result preserves expected lifecycle behavior.
     val result = try {
@@ -71,8 +77,11 @@ class ForegroundHeadlessService : HeadlessJsTaskService() {
     listener?.invoke(false)
     // Ensure notification cleaned up if destroyed unexpectedly
     cancelNotification()
+    // Receiver lifecycle managed by ExpoHeadlessTaskModule now.
     super.onDestroy()
   }
+
+  // No IPC messenger: messaging stripped from module.
 
   private fun createChannelIfNeeded(intent: Intent?) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -164,4 +173,6 @@ class ForegroundHeadlessService : HeadlessJsTaskService() {
       nm.cancel(NOTIFICATION_ID)
     } catch (_: Exception) {}
   }
+
+  // ensureBroadcastReceiver removed; handled centrally in module.
 }
