@@ -8,7 +8,6 @@ const isAndroid = Platform.OS === 'android';
 globalThis.__TEST = 0;
 
 if (isAndroid && !globalThis.__demoHeadlessTaskRegistered) {
-  console.log('[Demo] Registering headless task', ExpoHeadlessTask.isTask());
   var runningTask = false;
   ExpoHeadlessTask.loadTask(async (data) => {
     if (runningTask) {

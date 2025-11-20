@@ -9,8 +9,9 @@ if (NativeExpoHeadlessTaskModule) {
 import { AppRegistry } from 'react-native';
 
 export default (function createExpoHeadlessTaskModule() {
-	console.log('[ExpoHeadlessTask] JS module loaded');
-	
+	if(isAndroid) {
+		console.log('[ExpoHeadlessTask] JS module loaded', NativeExpoHeadlessTaskModule.isTask() ? '(in task)' : '(in app)');
+	}
 	async function ensureNotificationPermission() {
 		if (!isAndroid) return true;
 		if (Platform.Version < 33) return true; // POST_NOTIFICATIONS starts API 33
