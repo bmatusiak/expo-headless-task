@@ -9,5 +9,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "clean": "rm -rf android/build"
+  },
+  "dependencies": {
+    "events": "^3.3.0"
   }
 }
