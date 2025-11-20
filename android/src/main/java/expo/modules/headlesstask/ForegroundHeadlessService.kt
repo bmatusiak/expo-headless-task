@@ -8,30 +8,41 @@ import android.util.Log
 import android.os.Build
 import android.os.Bundle
 import android.content.Intent
-import android.content.BroadcastReceiver
 import android.content.IntentFilter
+import android.content.Context
 import androidx.core.app.NotificationCompat
-import com.facebook.react.HeadlessJsTaskService
-import com.facebook.react.bridge.Arguments
-import com.facebook.react.jstasks.HeadlessJsTaskConfig
 import com.facebook.react.ReactApplication
 
-class ForegroundHeadlessService : HeadlessJsTaskService() {
+/**
+  * Foreground variant of the headless task service.
+  * Inherits from [HeadlessTaskService] so the same JS task execution
+  * path is used while adding a persistent foreground notification.
+
+  * Remember to declare this service in AndroidManifest.xml:*
+  Process starts with its own name to have a separate process to have a isolate js context the foreground service.
+  <service
+    android:name="expo.modules.headlesstask.ForegroundHeadlessService"
+    android:process=":expo_headless_service_fg"
+    android:exported="false"
+    android:foregroundServiceType="dataSync" />
+ */
+class ForegroundHeadlessService : HeadlessTaskService() {
   companion object {
     const val CHANNEL_ID_DEFAULT = "expo_headless_fg"
     const val NOTIFICATION_ID = 1001
     const val ACTION_RENOTIFY = "expo_headless_fg_RENOTIFY"
-    var isRunning: Boolean = false
+    var isTask: Boolean = false
     var listener: ((Boolean) -> Unit)? = null
   }
 
   // Broadcast receiver logic migrated to ExpoHeadlessTaskModule. Keep no local receiver.
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    Log.d("ExpoHeadlessTask", "ForegroundHeadlessService onStartCommand: intent=$intent, flags=$flags, startId=$startId")
+    isTask = true // Marking this instace as the running task
     // If we're here due to a re-notify request (user dismissed the notification),
     // rebuild the notification without re-scheduling the JS task.
     if (intent?.action == ACTION_RENOTIFY || intent?.getBooleanExtra("renotify", false) == true) {
-      isRunning = true
       listener?.invoke(true)
       createChannelIfNeeded(intent)
       val notification = buildNotification(intent)
@@ -40,7 +51,6 @@ class ForegroundHeadlessService : HeadlessJsTaskService() {
       return START_STICKY
     }
 
-    isRunning = true
     listener?.invoke(true)
     createChannelIfNeeded(intent)
     val notification = buildNotification(intent)
@@ -58,6 +68,11 @@ class ForegroundHeadlessService : HeadlessJsTaskService() {
     return result
   }
 
+  override fun onHeadlessJsTaskStart(taskId: Int) {
+    Log.d("ExpoHeadlessTask", "onHeadlessJsTaskStart: taskId=$taskId")
+    try { super.onHeadlessJsTaskStart(taskId) } catch (_: Exception) {}
+  }
+
   override fun onHeadlessJsTaskFinish(taskId: Int) {
     // Stop foreground + service so notification is dismissed when task completes
     try {
@@ -73,11 +88,9 @@ class ForegroundHeadlessService : HeadlessJsTaskService() {
   }
 
   override fun onDestroy() {
-    isRunning = false
+    Log.d("ExpoHeadlessTask", "ForegroundHeadlessService onDestroy")
     listener?.invoke(false)
-    // Ensure notification cleaned up if destroyed unexpectedly
     cancelNotification()
-    // Receiver lifecycle managed by ExpoHeadlessTaskModule now.
     super.onDestroy()
   }
 
@@ -159,12 +172,6 @@ class ForegroundHeadlessService : HeadlessJsTaskService() {
     // Ensure notification cannot be dismissed while service runs
     notification.flags = notification.flags or Notification.FLAG_NO_CLEAR or Notification.FLAG_ONGOING_EVENT
     return notification
-  }
-
-  override fun getTaskConfig(intent: Intent?): HeadlessJsTaskConfig? {
-    val taskName = intent?.getStringExtra("taskName") ?: return null
-    val bundle = intent?.getBundleExtra("data") ?: Bundle()
-    return HeadlessJsTaskConfig(taskName, Arguments.fromBundle(bundle), 0, true)
   }
 
   private fun cancelNotification() {

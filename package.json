@@ -8,7 +8,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "clean": "rm -rf android/build"
+    "clean": "rm -rf android/build",
+    "start": "cd ../.. && expo run:android"
   },
   "dependencies": {
     "events": "^3.3.0"

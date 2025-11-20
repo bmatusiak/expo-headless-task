@@ -1,35 +1,37 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Platform, StyleSheet, Text, View } from 'react-native';
 import ExpoHeadlessTask from 'expo-headless-task';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Simplified demo: start/stop foreground headless task, display running state.
 const isAndroid = Platform.OS === 'android';
+globalThis.__TEST = 0;
 
 if (isAndroid && !globalThis.__demoHeadlessTaskRegistered) {
+  console.log('[Demo] Registering headless task', ExpoHeadlessTask.isTask());
+  var runningTask = false;
   ExpoHeadlessTask.loadTask(async (data) => {
+    if (runningTask) {
+      console.log('[HeadlessTask] already running, exiting');
+      return;
+    }
     console.log('[HeadlessTask] started with data', data);
+    runningTask = true;
     let i = 0;
-    while (i < 10) { // shorter loop for quicker demo
+    while (i < 6000) { // shorter loop for quicker demo
       await new Promise(r => setTimeout(r, 1000));
-      console.log('[HeadlessTask] tick', i);
+      const testValue = globalThis.__TEST || 0;
+      console.log(`[HeadlessTask] running ${i + 1}s, TEST=${testValue}`);
       i++;
     }
     console.log('[HeadlessTask] finished');
+    runningTask = false;
     try { ExpoHeadlessTask.stopTask(); } catch (e) { console.warn('Stop foreground task failed', e); }
   });
   globalThis.__demoHeadlessTaskRegistered = true;
 }
 
 export function Demo() {
-  const [running, setRunning] = useState(false);
-
-  useEffect(() => {
-    if (!isAndroid) return;
-    const runningSub = ExpoHeadlessTask.onTaskRunningChanged(({ running }) => setRunning(running));
-    return () => { runningSub.remove(); };
-  }, []);
-
-  if (!isAndroid) return null;
 
   const start = () => {
     ExpoHeadlessTask.startTask({ startedAt: Date.now() });
@@ -40,12 +42,19 @@ export function Demo() {
     console.log('[Demo] Headless task stop requested');
   };
 
+  useEffect(() => {
+    var interval = setInterval(() => {
+      globalThis.__TEST += 1
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (!isAndroid) return null;
   return (
     <View style={styles.controls}>
       <Text style={styles.controlsTitle}>Expo Headless Task</Text>
       <View style={styles.seperator} />
       <Text style={styles.sectionLabel}>Foreground Service + Headless JS</Text>
-      <Text style={styles.text}>Running: {String(running)}</Text>
       <View style={styles.button}>
         <Button title="Start Task" onPress={start} />
       </View>

@@ -16,8 +16,15 @@ expo install expo-headless-task
 
 Rebuild after native changes:
 ```bash
+cd /path/to/host/app
 npx expo run:android
 ```
+dont run `npx expo run:android` in this directory
+
+or to automatic run in host app, if placed in `<host-app>/modules/<this-module>`
+```bash
+npm run start
+`
 
 For JS-only edits, reload the dev client:
 ```bash

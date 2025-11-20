@@ -9,7 +9,7 @@
 	<application>
 		<service
 			android:name="expo.modules.headlesstask.ForegroundHeadlessService"
-			android:process=":expo_headless_task_fg"
+			android:process=":expo_headless_service_fg"
 			android:exported="false"
 			android:foregroundServiceType="dataSync" />
 	</application>

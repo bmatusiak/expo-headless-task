@@ -17,21 +17,6 @@ class ExpoHeadlessTaskModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("ExpoHeadlessTask")
 
-    // Only expose taskRunningChanged now; messaging removed.
-    Events("taskRunningChanged")
-
-    OnStartObserving {
-      ForegroundHeadlessService.listener = { running ->
-        try { sendEvent("taskRunningChanged", mapOf("running" to running)) } catch (_: Exception) {}
-      }
-      // Emit current state immediately
-      try { sendEvent("taskRunningChanged", mapOf("running" to ForegroundHeadlessService.isRunning)) } catch (_: Exception) {}
-    }
-
-    OnStopObserving {
-      ForegroundHeadlessService.listener = null
-    }
-
     AsyncFunction("startForegroundTask") { taskName: String, data: Map<String, Any>?, notification: Map<String, Any>? ->
       val intent = Intent(context, ForegroundHeadlessService::class.java).apply {
         putExtra("taskName", taskName)
@@ -58,11 +43,7 @@ class ExpoHeadlessTaskModule : Module() {
         }
       }
       try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-          ContextCompat.startForegroundService(context, intent)
-        } else {
-          context.startService(intent)
-        }
+        ContextCompat.startForegroundService(context, intent)
       } catch (_: Exception) {}
     }
 
@@ -71,8 +52,8 @@ class ExpoHeadlessTaskModule : Module() {
       try { context.stopService(intent) } catch (_: Exception) {}
     }
 
-    Function("isTaskRunning") {
-      ForegroundHeadlessService.isRunning
+    Function("isTask") {
+      ForegroundHeadlessService.isTask
     }
 
   }
