@@ -78,6 +78,14 @@ export function Demo() {
     ExpoHeadlessTask.stopForegroundTask();
   };
 
+  const toggle = () => {
+    if (running) {
+      stop();
+    } else {
+      start();
+    }
+  };
+
   const sendPing = () => {
     const payload = { type: 'ping', ts: Date.now(), seq: (lastSent?.seq || 0) + 1 };
     setLastSent(payload);
@@ -98,10 +106,7 @@ export function Demo() {
       <Text style={styles.sectionLabel}>Foreground Service + Headless JS</Text>
       <Text style={styles.text}>Running: {String(running)}</Text>
       <View style={styles.button}>
-        <Button title="Start Task" onPress={start} />
-      </View>
-      <View style={styles.button}>
-        <Button title="Stop Task" onPress={stop} />
+        <Button title={running ? 'Stop Task' : 'Start Task'} onPress={toggle} />
       </View>
       <View style={styles.button}>
         <Button title="Send Ping" onPress={sendPing} disabled={!running} />
