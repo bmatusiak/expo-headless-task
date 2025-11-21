@@ -50,7 +50,7 @@ export function Demo() {
   useEffect(() => {
     var interval = setInterval(() => {
       ExpoHeadlessTask.emit('update_test_value');
-    }, 1000);
+    }, 1);
     return () => clearInterval(interval);
   }, []);
 

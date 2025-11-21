@@ -4,7 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.util.Log
+// import android.util.Log
 import android.os.Build
 import android.os.Bundle
 import android.content.Intent
@@ -38,7 +38,7 @@ class ForegroundHeadlessService : HeadlessTaskService() {
   // Broadcast receiver logic migrated to ExpoHeadlessTaskModule. Keep no local receiver.
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    Log.d("ExpoHeadlessTask", "ForegroundHeadlessService onStartCommand: intent=$intent, flags=$flags, startId=$startId")
+    // Log.d("ExpoHeadlessTask", "ForegroundHeadlessService onStartCommand: intent=$intent, flags=$flags, startId=$startId")
     isTask = true // Marking this instace as the running task
     // If we're here due to a re-notify request (user dismissed the notification),
     // rebuild the notification without re-scheduling the JS task.
@@ -46,7 +46,7 @@ class ForegroundHeadlessService : HeadlessTaskService() {
       listener?.invoke(true)
       createChannelIfNeeded(intent)
       val notification = buildNotification(intent)
-      Log.d("ExpoHeadlessTask", "Re-notifying foreground with title=" + intent.getStringExtra("title"))
+      // Log.d("ExpoHeadlessTask", "Re-notifying foreground with title=" + intent.getStringExtra("title"))
       startForeground(NOTIFICATION_ID, notification)
       return START_STICKY
     }
@@ -54,7 +54,7 @@ class ForegroundHeadlessService : HeadlessTaskService() {
     listener?.invoke(true)
     createChannelIfNeeded(intent)
     val notification = buildNotification(intent)
-    Log.d("ExpoHeadlessTask", "Starting foreground with notification title=" + intent?.getStringExtra("title"))
+    // Log.d("ExpoHeadlessTask", "Starting foreground with notification title=" + intent?.getStringExtra("title"))
     startForeground(NOTIFICATION_ID, notification)
     // Receiver moved to ExpoHeadlessTaskModule; no local registration needed.
     // IMPORTANT: Call super so HeadlessJsTaskService schedules the JS task.
@@ -62,14 +62,14 @@ class ForegroundHeadlessService : HeadlessTaskService() {
     val result = try {
       super.onStartCommand(intent, flags, startId)
     } catch (e: Exception) {
-      Log.e("ExpoHeadlessTask", "super.onStartCommand failed: ${e.message}")
+      // Log.e("ExpoHeadlessTask", "super.onStartCommand failed: ${e.message}")
       START_STICKY
     }
     return result
   }
 
   override fun onHeadlessJsTaskStart(taskId: Int) {
-    Log.d("ExpoHeadlessTask", "onHeadlessJsTaskStart: taskId=$taskId")
+    // Log.d("ExpoHeadlessTask", "onHeadlessJsTaskStart: taskId=$taskId")
     try { super.onHeadlessJsTaskStart(taskId) } catch (_: Exception) {}
   }
 
@@ -80,7 +80,7 @@ class ForegroundHeadlessService : HeadlessTaskService() {
     } catch (_: Exception) {}
     // Explicitly cancel notification in case some OEMs keep it
     cancelNotification()
-    Log.d("ExpoHeadlessTask", "onHeadlessJsTaskFinish: taskId=$taskId; foreground stopped & notification cancelled")
+    // Log.d("ExpoHeadlessTask", "onHeadlessJsTaskFinish: taskId=$taskId; foreground stopped & notification cancelled")
     try {
       stopSelf()
     } catch (_: Exception) {}
@@ -88,7 +88,7 @@ class ForegroundHeadlessService : HeadlessTaskService() {
   }
 
   override fun onDestroy() {
-    Log.d("ExpoHeadlessTask", "ForegroundHeadlessService onDestroy")
+    // Log.d("ExpoHeadlessTask", "ForegroundHeadlessService onDestroy")
     listener?.invoke(false)
     cancelNotification()
     super.onDestroy()
