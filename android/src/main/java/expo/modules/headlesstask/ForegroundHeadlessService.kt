@@ -38,10 +38,41 @@ class ForegroundHeadlessService : HeadlessTaskService() {
   }
 
   // Broadcast receiver logic migrated to ExpoHeadlessTaskModule. Keep no local receiver.
+  private var ipcReceiverRegistered = false
+  private val ipcReceiver = object : android.content.BroadcastReceiver() {
+    override fun onReceive(ctx: Context?, intent: Intent?) {
+      try {
+        if (intent?.action != ACTION_IPC) return
+        val eventName = intent.getStringExtra("eventName") ?: return
+        // If someone asks CHECK_TASK, reply with CHECK_TASK_OK so other side knows we're alive
+        if (eventName == "CHECK_TASK") {
+          val reply = Intent(ACTION_IPC).apply {
+            setPackage(packageName)
+            putExtra("eventName", "CHECK_TASK_OK")
+            putExtra("json", "true")
+            putExtra("originIsTask", true)
+          }
+          try { sendBroadcast(reply) } catch (_: Exception) {}
+        }
+      } catch (_: Exception) {}
+    }
+  }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     // Log.d("ExpoHeadlessTask", "ForegroundHeadlessService onStartCommand: intent=$intent, flags=$flags, startId=$startId")
     isTask = true // Marking this instace as the running task
+    // Ensure local IPC receiver is registered so we can respond to CHECK_TASK
+    try {
+      if (!ipcReceiverRegistered) {
+        val filter = IntentFilter(ACTION_IPC)
+        if (Build.VERSION.SDK_INT >= 33) {
+          registerReceiver(ipcReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+          registerReceiver(ipcReceiver, filter)
+        }
+        ipcReceiverRegistered = true
+      }
+    } catch (_: Exception) {}
     // If explicit stop requested (e.g. user dismissed non-sticky notification)
     if (intent?.action == ACTION_STOP) {
       // Broadcast STOP_TASK over IPC before shutting down
@@ -109,6 +140,12 @@ class ForegroundHeadlessService : HeadlessTaskService() {
     // Log.d("ExpoHeadlessTask", "ForegroundHeadlessService STOPPED")
     // listener?.invoke(false)
     // cancelNotification()
+    try {
+      if (ipcReceiverRegistered) {
+        unregisterReceiver(ipcReceiver)
+        ipcReceiverRegistered = false
+      }
+    } catch (_: Exception) {}
     super.onDestroy()
   }
 

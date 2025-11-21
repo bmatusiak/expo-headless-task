@@ -10,6 +10,9 @@ import android.os.Bundle
 import androidx.core.content.ContextCompat
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ExpoHeadlessTaskModule : Module() {
   private val context
@@ -138,6 +141,53 @@ class ExpoHeadlessTaskModule : Module() {
         }
         context.sendBroadcast(intent)
       } catch (_: Exception) {}
+    }
+
+    // Check whether the ForegroundHeadlessService is running by asking it to reply.
+    // Optional parameter: timeoutMs (Int) - how long to wait for a reply in milliseconds.
+    AsyncFunction("checkTask") { timeoutMs: Int? ->
+      ensureIpcReceiver()
+      val latch = CountDownLatch(1)
+      val ok = AtomicBoolean(false)
+      val tmpReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, intent: Intent?) {
+          try {
+            if (intent?.action != ACTION_IPC) return
+            val eventName = intent.getStringExtra("eventName") ?: return
+            val originIsTask = intent.getBooleanExtra("originIsTask", false)
+            if (eventName == "CHECK_TASK_OK" && originIsTask) {
+              ok.set(true)
+              latch.countDown()
+            }
+          } catch (_: Exception) {}
+        }
+      }
+      try {
+        val filter = IntentFilter(ACTION_IPC)
+        if (Build.VERSION.SDK_INT >= 33) {
+          context.registerReceiver(tmpReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+          context.registerReceiver(tmpReceiver, filter)
+        }
+      } catch (_: Exception) { }
+
+      try {
+        val intent = Intent(ACTION_IPC).apply {
+          setPackage(context.packageName)
+          putExtra("eventName", "CHECK_TASK")
+          putExtra("json", "{}")
+          putExtra("originIsTask", ForegroundHeadlessService.isTask)
+        }
+        context.sendBroadcast(intent)
+      } catch (_: Exception) {}
+
+      try {
+        val waitMs = (timeoutMs?.toLong() ?: 1000L)
+        latch.await(waitMs, TimeUnit.MILLISECONDS)
+      } catch (_: Exception) {}
+
+      try { context.unregisterReceiver(tmpReceiver) } catch (_: Exception) {}
+      ok.get()
     }
 
   }

@@ -40,6 +40,11 @@ export default (function createExpoHeadlessTaskModule() {
 		return NativeExpoHeadlessTaskModule.isTask();
 	}
 
+	async function checkTask(timeoutMs = 1000) {
+		if (!isAndroid) return false;
+		try { return await NativeExpoHeadlessTaskModule.checkTask(timeoutMs); } catch (e) { return false; }
+	}
+
 	const loadedTasks = [];
 
 	// IPC event handlers registry: eventName -> Set<handler>
@@ -138,12 +143,15 @@ export default (function createExpoHeadlessTaskModule() {
 		stopTask,
 		loadTask,
 		isTask,
+		checkTask,
 		isTaskString:NativeExpoHeadlessTaskModule.isTask() ? '(in task)' : '(in app)',
 		ensureNotificationPermission,
 		NativeExpoHeadlessTaskModule,
 		on,
 		emit,
 	};
+
+	globalThis.ExpoHeadlessTask = ExpoHeadlessTaskModule;
 
 	return ExpoHeadlessTaskModule;
 }());
