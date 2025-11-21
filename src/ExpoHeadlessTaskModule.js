@@ -113,6 +113,7 @@ export default (function createExpoHeadlessTaskModule() {
 				title: 'Background work in progress',
 				text: 'Working in background!',
 				importance: 2,
+				sticky: false,
 				...notification,
 			},
 		});

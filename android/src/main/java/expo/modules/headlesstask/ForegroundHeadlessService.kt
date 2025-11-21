@@ -31,6 +31,7 @@ class ForegroundHeadlessService : HeadlessTaskService() {
     const val CHANNEL_ID_DEFAULT = "expo_headless_fg"
     const val NOTIFICATION_ID = 1001
     const val ACTION_RENOTIFY = "expo_headless_fg_RENOTIFY"
+    const val ACTION_STOP = "expo_headless_fg_STOP"
     var isTask: Boolean = false
     var listener: ((Boolean) -> Unit)? = null
   }
@@ -40,6 +41,14 @@ class ForegroundHeadlessService : HeadlessTaskService() {
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     // Log.d("ExpoHeadlessTask", "ForegroundHeadlessService onStartCommand: intent=$intent, flags=$flags, startId=$startId")
     isTask = true // Marking this instace as the running task
+    // If explicit stop requested (e.g. user dismissed non-sticky notification)
+    if (intent?.action == ACTION_STOP) {
+      try { stopForeground(true) } catch (_: Exception) {}
+      cancelNotification()
+      listener?.invoke(false)
+      try { stopSelf() } catch (_: Exception) {}
+      return START_NOT_STICKY
+    }
     // If we're here due to a re-notify request (user dismissed the notification),
     // rebuild the notification without re-scheduling the JS task.
     if (intent?.action == ACTION_RENOTIFY || intent?.getBooleanExtra("renotify", false) == true) {
@@ -81,9 +90,7 @@ class ForegroundHeadlessService : HeadlessTaskService() {
     // Explicitly cancel notification in case some OEMs keep it
     cancelNotification()
     // Log.d("ExpoHeadlessTask", "onHeadlessJsTaskFinish: taskId=$taskId; foreground stopped & notification cancelled")
-    try {
-      stopSelf()
-    } catch (_: Exception) {}
+    try { stopSelf() } catch (_: Exception) {}
     try { super.onHeadlessJsTaskFinish(taskId) } catch (_: Exception) {}
   }
 
@@ -117,6 +124,7 @@ class ForegroundHeadlessService : HeadlessTaskService() {
     }
     val title = intent?.getStringExtra("title") ?: "Running background task"
     val text = intent?.getStringExtra("text") ?: "Processing..."
+    val sticky = intent?.getBooleanExtra("sticky", true) ?: true
     val builder = NotificationCompat.Builder(this, channelId)
       .setContentTitle(title)
       .setContentText(text)
@@ -125,7 +133,7 @@ class ForegroundHeadlessService : HeadlessTaskService() {
       .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
       .setCategory(NotificationCompat.CATEGORY_SERVICE)
       .setAutoCancel(false)
-      .setOngoing(true)
+      .setOngoing(sticky)
 
     // When the notification is tapped, bring the app to the foreground
     try {
@@ -144,33 +152,42 @@ class ForegroundHeadlessService : HeadlessTaskService() {
       }
     } catch (_: Exception) { }
 
-    // If the user dismisses the notification, immediately re-add it.
+    // If sticky, re-notify on dismiss; else stop service.
     try {
-      val reNotifyIntent = Intent(this, ForegroundHeadlessService::class.java).apply {
-        action = ACTION_RENOTIFY
-        // Propagate essentials so the rebuilt notification has consistent content
-        putExtra("channelId", channelId)
-        putExtra("channelName", intent?.getStringExtra("channelName"))
-        val importanceRaw = intent?.getIntExtra("importance", NotificationManager.IMPORTANCE_LOW)
-          ?: NotificationManager.IMPORTANCE_LOW
-        putExtra("importance", importanceRaw)
-        putExtra("title", title)
-        putExtra("text", text)
-        // Marker for older callers that might not set action
-        putExtra("renotify", true)
-      }
       val piFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
       } else {
         PendingIntent.FLAG_UPDATE_CURRENT
       }
-      val deletePI = PendingIntent.getService(this, 1, reNotifyIntent, piFlags)
-      builder.setDeleteIntent(deletePI)
+      if (sticky) {
+        val reNotifyIntent = Intent(this, ForegroundHeadlessService::class.java).apply {
+          action = ACTION_RENOTIFY
+          putExtra("channelId", channelId)
+          putExtra("channelName", intent?.getStringExtra("channelName"))
+          val importanceRaw = intent?.getIntExtra("importance", NotificationManager.IMPORTANCE_LOW)
+            ?: NotificationManager.IMPORTANCE_LOW
+          putExtra("importance", importanceRaw)
+          putExtra("title", title)
+          putExtra("text", text)
+          putExtra("renotify", true)
+          putExtra("sticky", true)
+        }
+        val deletePI = PendingIntent.getService(this, 1, reNotifyIntent, piFlags)
+        builder.setDeleteIntent(deletePI)
+      } else {
+        val stopIntent = Intent(this, ForegroundHeadlessService::class.java).apply {
+          action = ACTION_STOP
+        }
+        val deletePI = PendingIntent.getService(this, 2, stopIntent, piFlags)
+        builder.setDeleteIntent(deletePI)
+      }
     } catch (_: Exception) { }
 
     val notification = builder.build()
-    // Ensure notification cannot be dismissed while service runs
-    notification.flags = notification.flags or Notification.FLAG_NO_CLEAR or Notification.FLAG_ONGOING_EVENT
+    // If sticky, ensure notification cannot be dismissed; else allow dismissal.
+    if (sticky) {
+      notification.flags = notification.flags or Notification.FLAG_NO_CLEAR or Notification.FLAG_ONGOING_EVENT
+    }
     return notification
   }
 

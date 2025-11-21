@@ -107,6 +107,7 @@ class ExpoHeadlessTaskModule : Module() {
           (n["title"] as? String)?.let { putExtra("title", it) }
           (n["text"] as? String)?.let { putExtra("text", it) }
           (n["importance"] as? Int)?.let { putExtra("importance", it) }
+          (n["sticky"] as? Boolean)?.let { putExtra("sticky", it) }
         }
       }
       try {
