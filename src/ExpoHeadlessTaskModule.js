@@ -127,7 +127,8 @@ export default (function createExpoHeadlessTaskModule() {
 
 	function stopTask() {
 		if (!isAndroid) return;
-		stopForegroundTask();
+		// stopForegroundTask();
+		emit('STOP_TASK');
 		taskStarted = false;
 	}
 

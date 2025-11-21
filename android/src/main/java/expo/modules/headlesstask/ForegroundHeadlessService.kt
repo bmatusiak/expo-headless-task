@@ -4,7 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-// import android.util.Log
+import android.util.Log
 import android.os.Build
 import android.os.Bundle
 import android.content.Intent
@@ -32,8 +32,9 @@ class ForegroundHeadlessService : HeadlessTaskService() {
     const val NOTIFICATION_ID = 1001
     const val ACTION_RENOTIFY = "expo_headless_fg_RENOTIFY"
     const val ACTION_STOP = "expo_headless_fg_STOP"
+    const val ACTION_IPC = "expo.modules.headlesstask.IPC"
     var isTask: Boolean = false
-    var listener: ((Boolean) -> Unit)? = null
+    // var listener: ((Boolean) -> Unit)? = null
   }
 
   // Broadcast receiver logic migrated to ExpoHeadlessTaskModule. Keep no local receiver.
@@ -43,16 +44,26 @@ class ForegroundHeadlessService : HeadlessTaskService() {
     isTask = true // Marking this instace as the running task
     // If explicit stop requested (e.g. user dismissed non-sticky notification)
     if (intent?.action == ACTION_STOP) {
-      try { stopForeground(true) } catch (_: Exception) {}
-      cancelNotification()
-      listener?.invoke(false)
-      try { stopSelf() } catch (_: Exception) {}
+      // Broadcast STOP_TASK over IPC before shutting down
+      try {
+        val ipcIntent = Intent(ACTION_IPC).apply {
+          setPackage(packageName)
+          putExtra("eventName", "STOP_TASK")
+          putExtra("json", "true")
+          putExtra("originIsTask", false)
+        }
+        sendBroadcast(ipcIntent)
+      } catch (_: Exception) { }
+      // try { stopForeground(true) } catch (_: Exception) {}
+      // cancelNotification()
+      // listener?.invoke(false)
+      // try { stopSelf() } catch (_: Exception) {}
       return START_NOT_STICKY
     }
     // If we're here due to a re-notify request (user dismissed the notification),
     // rebuild the notification without re-scheduling the JS task.
     if (intent?.action == ACTION_RENOTIFY || intent?.getBooleanExtra("renotify", false) == true) {
-      listener?.invoke(true)
+      // listener?.invoke(true)
       createChannelIfNeeded(intent)
       val notification = buildNotification(intent)
       // Log.d("ExpoHeadlessTask", "Re-notifying foreground with title=" + intent.getStringExtra("title"))
@@ -60,7 +71,7 @@ class ForegroundHeadlessService : HeadlessTaskService() {
       return START_STICKY
     }
 
-    listener?.invoke(true)
+    // listener?.invoke(true)
     createChannelIfNeeded(intent)
     val notification = buildNotification(intent)
     // Log.d("ExpoHeadlessTask", "Starting foreground with notification title=" + intent?.getStringExtra("title"))
@@ -89,17 +100,22 @@ class ForegroundHeadlessService : HeadlessTaskService() {
     } catch (_: Exception) {}
     // Explicitly cancel notification in case some OEMs keep it
     cancelNotification()
-    // Log.d("ExpoHeadlessTask", "onHeadlessJsTaskFinish: taskId=$taskId; foreground stopped & notification cancelled")
+    Log.d("ExpoHeadlessTask", "onHeadlessJsTaskFinish: taskId=$taskId; foreground stopped")
     try { stopSelf() } catch (_: Exception) {}
     try { super.onHeadlessJsTaskFinish(taskId) } catch (_: Exception) {}
   }
 
   override fun onDestroy() {
-    // Log.d("ExpoHeadlessTask", "ForegroundHeadlessService onDestroy")
-    listener?.invoke(false)
-    cancelNotification()
+    // Log.d("ExpoHeadlessTask", "ForegroundHeadlessService STOPPED")
+    // listener?.invoke(false)
+    // cancelNotification()
     super.onDestroy()
   }
+
+  override fun onTaskRemoved(rootIntent: Intent?) {
+    Log.d("ExpoHeadlessTask", "ForegroundHeadlessService onTaskRemoved")
+    try { super.onTaskRemoved(rootIntent) } catch (_: Exception) {}
+  } 
 
   // No IPC messenger: messaging stripped from module.
 

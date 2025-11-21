@@ -14,13 +14,21 @@ if (isAndroid && !globalThis.__demoHeadlessTaskRegistered) {
       console.log('[HeadlessTask] already running, exiting');
       return;
     }
-    ExpoHeadlessTask.on('update_test_value', async () => {
+    var subscription = ExpoHeadlessTask.on('update_test_value', async () => {
       globalThis.__TEST += 1;
     });
     console.log('[HeadlessTask] started with data', data);
     runningTask = true;
+    var stopSubscription = ExpoHeadlessTask.on('STOP_TASK', () => {
+      console.log('[HeadlessTask] STOP_TASK received, exiting');
+      runningTask = false;
+      subscription.remove();
+      stopSubscription.remove();
+      try { ExpoHeadlessTask.stopTask(); } catch (e) { console.warn('Stop foreground task failed', e); }
+    });
+
     let i = 0;
-    while (i < 6000) { // shorter loop for quicker demo
+    while (i < 6000 && runningTask) { // shorter loop for quicker demo
       await new Promise(r => setTimeout(r, 1000));
       const testValue = globalThis.__TEST || 0;
       console.log(`[HeadlessTask] running ${i + 1}s, TEST=${testValue}`);
@@ -29,6 +37,8 @@ if (isAndroid && !globalThis.__demoHeadlessTaskRegistered) {
     }
     console.log('[HeadlessTask] finished');
     runningTask = false;
+    subscription.remove();
+    stopSubscription.remove();
     try { ExpoHeadlessTask.stopTask(); } catch (e) { console.warn('Stop foreground task failed', e); }
   });
 
