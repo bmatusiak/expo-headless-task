@@ -9,7 +9,7 @@ if (NativeExpoHeadlessTaskModule) {
 import { AppRegistry } from 'react-native';
 
 export default (function createExpoHeadlessTaskModule() {
-	if(isAndroid) {
+	if (isAndroid) {
 		console.log('[ExpoHeadlessTask] JS module loaded', NativeExpoHeadlessTaskModule.isTask() ? '(in task)' : '(in app)');
 	}
 	async function ensureNotificationPermission() {
@@ -40,13 +40,42 @@ export default (function createExpoHeadlessTaskModule() {
 		return NativeExpoHeadlessTaskModule.isTask();
 	}
 
-	function onTaskRunningChanged(listener) {
-		if (!emitter) return { remove: () => { } };
-		const subscription = emitter.addListener('taskRunningChanged', listener);
-		return { remove: () => subscription.remove() };
+	const loadedTasks = [];
+
+	// IPC event handlers registry: eventName -> Set<handler>
+	const ipcHandlers = new Map();
+
+	function on(eventName, handler) {
+		if (!isAndroid) return { remove() { } };
+		if (!ipcHandlers.has(eventName)) ipcHandlers.set(eventName, new Set());
+		ipcHandlers.get(eventName).add(handler);
+		return {
+			remove() {
+				try { ipcHandlers.get(eventName)?.delete(handler); } catch (e) { }
+			}
+		};
 	}
 
-	const loadedTasks = [];
+	function emit(eventName, data = {}) {
+		if (!isAndroid) return;
+		try { NativeExpoHeadlessTaskModule.emit(eventName, data); } catch (e) { }
+	}
+
+	// Subscribe to native IPC events once.
+	if (emitter && !globalThis.__ExpoHeadlessTaskIPCSubscribed) {
+		emitter.addListener('ipcEvent', ({ event, json }) => {
+			try {
+				const parsed = json ? JSON.parse(json) : {};
+				const handlers = ipcHandlers.get(event);
+				if (handlers) {
+					for (const h of Array.from(handlers)) {
+						try { h(parsed); } catch (e) { }
+					}
+				}
+			} catch (e) { }
+		});
+		globalThis.__ExpoHeadlessTaskIPCSubscribed = true;
+	}
 	var __HEADLESSTASKCONTEXT = false; // retained for potential future diagnostic use
 
 	// Register headless task once at module load to avoid duplicate registrations under fast refresh/StrictMode
@@ -101,14 +130,18 @@ export default (function createExpoHeadlessTaskModule() {
 		taskStarted = false;
 	}
 
-	return {
+	const ExpoHeadlessTaskModule = {
 		get __HEADLESSTASKCONTEXT() { return __HEADLESSTASKCONTEXT; },
 		startTask,
 		stopTask,
 		loadTask,
 		isTask,
-		onTaskRunningChanged,
+		isTaskString:NativeExpoHeadlessTaskModule.isTask() ? '(in task)' : '(in app)',
 		ensureNotificationPermission,
 		NativeExpoHeadlessTaskModule,
+		on,
+		emit,
 	};
+
+	return ExpoHeadlessTaskModule;
 }());

@@ -1,7 +1,10 @@
 package expo.modules.headlesstask
 
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
 import androidx.core.content.ContextCompat
@@ -13,11 +16,75 @@ class ExpoHeadlessTaskModule : Module() {
     get() = appContext.reactContext ?: appContext.currentActivity
     ?: throw IllegalStateException("Android context is not available yet")
 
+  private val ACTION_IPC = "expo.modules.headlesstask.IPC"
+  private var ipcReceiverRegistered = false
+  private val ipcReceiver = object : BroadcastReceiver() {
+    override fun onReceive(ctx: Context?, intent: Intent?) {
+      if (intent?.action != ACTION_IPC) return
+      try {
+        val originIsTask = intent.getBooleanExtra("originIsTask", false)
+        val currentIsTask = ForegroundHeadlessService.isTask
+        // Ignore events originating from the same context (prevent echo)
+        if (originIsTask == currentIsTask) return
+        val eventName = intent.getStringExtra("eventName") ?: return
+        val json = intent.getStringExtra("json") ?: "{}"
+        sendEvent("ipcEvent", mapOf(
+          "event" to eventName,
+          "json" to json,
+          "originIsTask" to originIsTask
+        ))
+      } catch (_: Exception) {}
+    }
+  }
+
+  @SuppressLint("UnspecifiedRegisterReceiverFlag")
+  private fun ensureIpcReceiver() {
+    if (ipcReceiverRegistered) return
+    try {
+      val filter = IntentFilter(ACTION_IPC)
+      if (Build.VERSION.SDK_INT >= 33) {
+        context.registerReceiver(ipcReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+      } else {
+        context.registerReceiver(ipcReceiver, filter)
+      }
+      ipcReceiverRegistered = true
+    } catch (_: Exception) {}
+  }
+
+  private fun mapToJson(data: Map<String, Any>?): String {
+    if (data == null || data.isEmpty()) return "{}"
+    val sb = StringBuilder()
+    sb.append('{')
+    var first = true
+    for ((k, v) in data) {
+      if (!first) sb.append(',') else first = false
+      sb.append('"').append(escapeJson(k)).append('"').append(':')
+      when (v) {
+        is String -> sb.append('"').append(escapeJson(v)).append('"')
+        is Number, is Boolean -> sb.append(v.toString())
+        else -> sb.append('"').append(escapeJson(v.toString())).append('"')
+      }
+    }
+    sb.append('}')
+    return sb.toString()
+  }
+
+  private fun escapeJson(s: String): String = s
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+    .replace("\n", "\\n")
+    .replace("\r", "\\r")
+    .replace("\t", "\\t")
+
   @SuppressLint("UnspecifiedRegisterReceiverFlag")
   override fun definition() = ModuleDefinition {
     Name("ExpoHeadlessTask")
 
+     // Native -> JS event for IPC delivery
+     Events("ipcEvent")
+
     AsyncFunction("startForegroundTask") { taskName: String, data: Map<String, Any>?, notification: Map<String, Any>? ->
+      ensureIpcReceiver()
       val intent = Intent(context, ForegroundHeadlessService::class.java).apply {
         putExtra("taskName", taskName)
         // Data bundle
@@ -48,12 +115,28 @@ class ExpoHeadlessTaskModule : Module() {
     }
 
     AsyncFunction("stopForegroundTask") {
+      ensureIpcReceiver()
       val intent = Intent(context, ForegroundHeadlessService::class.java)
       try { context.stopService(intent) } catch (_: Exception) {}
     }
 
     Function("isTask") {
+      ensureIpcReceiver()
       ForegroundHeadlessService.isTask
+    }
+
+    // IPC emit: broadcasts an intent only other process will consume.
+    AsyncFunction("emit") { eventName: String, data: Map<String, Any>? ->
+      ensureIpcReceiver()
+      try {
+        val intent = Intent(ACTION_IPC).apply {
+          setPackage(context.packageName) // restrict to our app package
+          putExtra("eventName", eventName)
+          putExtra("json", mapToJson(data))
+          putExtra("originIsTask", ForegroundHeadlessService.isTask)
+        }
+        context.sendBroadcast(intent)
+      } catch (_: Exception) {}
     }
 
   }
